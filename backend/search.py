@@ -1,72 +1,74 @@
-import os
+from fastapi import APIRouter, UploadFile, File, HTTPException
+from pydantic import BaseModel
+from typing import List
 import numpy as np
-from deepface import DeepFace
-from scipy.spatial.distance import cosine
-import glob
+import cv2
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.declarative import declarative_base
+from sklearn.metrics.pairwise import cosine_similarity
+import json
 
-# 🔹 Lấy đường dẫn tuyệt đối để tránh lỗi trên Windows/Linux
-BASE_DIR = os.path.abspath("./data")
-FEATURES_DIR = os.path.join(BASE_DIR, "features")
-IMAGES_DIR = os.path.join(BASE_DIR, "images")
-UPLOADS_DIR = os.path.join(BASE_DIR, "uploads")
+from extract_features import extract_features
 
-# 🔹 1. Load tất cả vector đặc trưng đã lưu
-def load_features():
-    features = {}
-    for file in glob.glob(os.path.join(FEATURES_DIR, "*.npy")):
-        img_name = os.path.basename(file).replace(".npy", "")
-        features[img_name] = np.load(file)
-    return features
+router = APIRouter()
 
-# 🔹 2. Hàm tìm kiếm 3 ảnh giống nhất
-def find_similar_images(input_image_path, image_folder=IMAGES_DIR):
-    """
-    Tìm kiếm 3 ảnh giống nhất với ảnh input trong `image_folder`.
-    """
-    input_image_path = os.path.abspath(input_image_path)
-    image_folder = os.path.abspath(image_folder)
-    
-    if not os.path.exists(input_image_path):
-        print(f'⚠️ Ảnh không tồn tại: {input_image_path}')
-        return []
-    else:
-        print(f'🔍 Đang tìm ảnh giống với: {input_image_path}')
-    
-    # Trích xuất vector đặc trưng của ảnh input
-    try:
-        input_vector = DeepFace.represent(input_image_path, model_name="Facenet")[0]["embedding"]
-    except Exception as e:
-        print(f'❌ Lỗi khi trích xuất đặc trưng ảnh: {e}')
-        return []
+# --- Cấu hình DB ---
+DATABASE_URL = "mysql+pymysql://root:12345678@localhost:3306/mds"
+engine = create_engine(DATABASE_URL)
+Session = sessionmaker(bind=engine)
+session = Session()
+Base = declarative_base()
 
-    # Load tập vector đã có
-    dataset_features = load_features()
-    if not dataset_features:
-        print("⚠️ Không có dữ liệu đặc trưng nào được tải.")
-        return []
-    
-    # Tính toán độ tương đồng
-    similarities = []
-    for img_name, feature in dataset_features.items():
+# --- ORM ---
+from sqlalchemy import Column, Integer, String, Text
+
+class FaceFeature(Base):
+    __tablename__ = 'face_features'
+    id = Column(Integer, primary_key=True)
+    filename = Column(String(255), unique=True)
+    features = Column(Text)
+
+# --- Response Model ---
+class SearchResult(BaseModel):
+    filename: str
+    similarity: float
+
+@router.post("/search", response_model=List[SearchResult])
+async def search_image(file: UploadFile = File(...)):
+    contents = await file.read()
+    npimg = np.frombuffer(contents, np.uint8)
+    img = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
+
+    if img is None:
+        raise HTTPException(status_code=400, detail="Không đọc được ảnh")
+
+    # Trích xuất đặc trưng ảnh truy vấn
+    query_feat = extract_features(img)
+
+    # Tải tất cả đặc trưng trong DB
+    records = session.query(FaceFeature).all()
+    if not records:
+        raise HTTPException(status_code=404, detail="Không có dữ liệu trong cơ sở dữ liệu")
+
+    features = []
+    filenames = []
+    for rec in records:
         try:
-            similarity = 1 - cosine(input_vector, feature)  # Giá trị càng gần 1 càng giống
-            similarities.append((img_name, similarity))
+            vec = np.array(json.loads(rec.features)).reshape(1, -1)
+            features.append(vec)
+            filenames.append(rec.filename)
         except Exception as e:
-            print(f'⚠️ Lỗi khi tính độ tương đồng với {img_name}: {e}')
+            print(f"Lỗi khi đọc vector của {rec.filename}: {e}")
 
-    # Sắp xếp theo độ tương đồng giảm dần
-    similarities.sort(key=lambda x: x[1], reverse=True)
-    
-    # Lấy 3 ảnh giống nhất
-    top_matches = similarities[:3]
-    print("Top matches:", top_matches)
-    
-    # Chuyển đổi tên ảnh thành đường dẫn
-    return [f"images/{img_name}.jpg" for img_name, _ in top_matches]
-# 🔹 Test thử
-if __name__ == "__main__":
-    test_image = os.path.join(UPLOADS_DIR, "test.png")  # Đổi thành ảnh test có sẵn
-    results = find_similar_images(test_image)
-    print("🔎 Ảnh giống nhất:")
-    for img in results:
-        print(f"- {img}")
+    features_matrix = np.vstack(features)
+    sims = cosine_similarity(query_feat, features_matrix)[0]
+
+    top_indices = sims.argsort()[::-1][:3]
+    results = [
+        SearchResult(filename=filenames[idx], similarity=float(sims[idx]))
+        for idx in top_indices
+    ]
+    for idx in top_indices:
+        print(f"📸 Ảnh tương đồng: {filenames[idx]} | Similarity: {sims[idx]:.4f}")
+    return results

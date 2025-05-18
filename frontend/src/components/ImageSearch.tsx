@@ -1,5 +1,5 @@
+import React from 'react';
 import { useState } from "react";
-import { searchImage } from "../services/api";
 import {
   Box,
   Button,
@@ -16,11 +16,17 @@ import CloudUploadIcon from "@mui/icons-material/CloudUpload";
 import CloseIcon from "@mui/icons-material/Close";
 import ImageSearchIcon from "@mui/icons-material/ImageSearch";
 import Fade from "@mui/material/Fade";
+import { searchImage } from "../services/api";
+
+type SimilarImage = {
+  filename: string;
+  similarity: number;
+};
 
 const ImageSearch = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
-  const [similarImages, setSimilarImages] = useState<string[]>([]);
+  const [similarImages, setSimilarImages] = useState<SimilarImage[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -72,7 +78,6 @@ const ImageSearch = () => {
 
   return (
     <Box sx={{ maxWidth: 800, mx: "auto", mt: 5, textAlign: "center" }}>
-      {/* Tiêu đề với icon */}
       <Typography
         variant="h4"
         gutterBottom
@@ -83,7 +88,6 @@ const ImageSearch = () => {
         Tìm kiếm ảnh ngược
       </Typography>
 
-      {/* Khu vực tải ảnh */}
       <Paper
         elevation={3}
         sx={{
@@ -115,7 +119,6 @@ const ImageSearch = () => {
           </IconButton>
         </label>
 
-        {/* Hiển thị hướng dẫn hoặc ảnh xem trước */}
         {!previewImage && (
           <Typography variant="body1" sx={{ mt: 2 }}>
             {isDragging ? "Thả ảnh vào đây" : "Chọn hoặc kéo thả ảnh vào đây"}
@@ -149,7 +152,6 @@ const ImageSearch = () => {
           </Box>
         </Fade>
 
-        {/* Nút tìm kiếm */}
         <Button
           variant="contained"
           color="primary"
@@ -164,7 +166,6 @@ const ImageSearch = () => {
         </Button>
       </Paper>
 
-      {/* Thông báo lỗi */}
       {error && (
         <Typography
           sx={{
@@ -179,7 +180,6 @@ const ImageSearch = () => {
         </Typography>
       )}
 
-      {/* Khu vực hiển thị ảnh tương tự */}
       <Fade in={similarImages.length > 0} timeout={500}>
         <Box sx={{ mt: 4 }}>
           <Typography variant="h5" gutterBottom>
@@ -200,21 +200,27 @@ const ImageSearch = () => {
                 >
                   <CardMedia
                     component="img"
-                    src={`http://localhost:8000/${img}`}
-                    alt="Similar"
+                    src={`http://localhost:8000/images/${img.filename}`}
+                    alt={`Similar ${idx + 1}`}
                     onError={(e) =>
                       (e.currentTarget.src = "https://via.placeholder.com/150")
                     }
                     sx={{ width: "100%", height: "100%", objectFit: "cover" }}
                   />
                 </Card>
+                <Typography
+                  variant="body2"
+                  align="center"
+                  sx={{ mt: 1 }}
+                >
+                  Similarity: {(img.similarity * 100).toFixed(2)}%
+                </Typography>
               </Grid>
             ))}
           </Grid>
         </Box>
       </Fade>
 
-      {/* Hiệu ứng loading toàn màn hình */}
       <Backdrop
         sx={{ color: "#fff", zIndex: (theme) => theme.zIndex.drawer + 1 }}
         open={loading}

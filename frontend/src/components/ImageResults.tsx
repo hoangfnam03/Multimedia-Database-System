@@ -2,17 +2,20 @@ import React from 'react';
 import { Box, Typography, Grid, Card, CardMedia, Skeleton } from '@mui/material';
 import { motion } from 'framer-motion';
 
+interface SimilarImage {
+  filename: string;
+  similarity: number;
+}
+
 interface ImageResultsProps {
-  similarImages: string[];
+  similarImages: SimilarImage[];
   loading: boolean;
   error: string | null;
 }
 
 const ImageResults: React.FC<ImageResultsProps> = ({ similarImages, loading, error }) => {
-  // If there are no images and no error, don't render anything
   if (similarImages.length === 0 && !error && !loading) return null;
 
-  // Animation variants for container
   const containerVariants = {
     hidden: { opacity: 0 },
     visible: {
@@ -23,7 +26,6 @@ const ImageResults: React.FC<ImageResultsProps> = ({ similarImages, loading, err
     },
   };
 
-  // Animation variants for items
   const itemVariants = {
     hidden: { y: 20, opacity: 0 },
     visible: {
@@ -44,7 +46,6 @@ const ImageResults: React.FC<ImageResultsProps> = ({ similarImages, loading, err
       variants={containerVariants}
       sx={{ mt: 4 }}
     >
-      {/* Error message */}
       {error && (
         <Typography
           component={motion.p}
@@ -67,7 +68,6 @@ const ImageResults: React.FC<ImageResultsProps> = ({ similarImages, loading, err
         </Typography>
       )}
 
-      {/* Results heading */}
       {similarImages.length > 0 && (
         <Typography 
           variant="h5" 
@@ -88,7 +88,6 @@ const ImageResults: React.FC<ImageResultsProps> = ({ similarImages, loading, err
         </Typography>
       )}
 
-      {/* Image grid */}
       <Grid container spacing={2} justifyContent="center">
         {similarImages.map((img, idx) => (
           <Grid item xs={6} sm={4} md={3} key={idx}>
@@ -109,7 +108,7 @@ const ImageResults: React.FC<ImageResultsProps> = ({ similarImages, loading, err
             >
               <CardMedia
                 component="img"
-                src={`http://localhost:8000/${img}`}
+                src={`http://localhost:8000/images/${img.filename}`}
                 alt={`Similar image ${idx + 1}`}
                 onError={(e) => (e.currentTarget.src = "https://via.placeholder.com/150?text=Image+Not+Found")}
                 sx={{
@@ -119,10 +118,12 @@ const ImageResults: React.FC<ImageResultsProps> = ({ similarImages, loading, err
                 }}
               />
             </Card>
+            <Typography variant="body2" align="center" sx={{ mt: 1 }}>
+              Similarity: {(img.similarity * 100).toFixed(2)}%
+            </Typography>
           </Grid>
         ))}
 
-        {/* Loading skeletons */}
         {loading &&
           Array.from(new Array(8)).map((_, idx) => (
             <Grid item xs={6} sm={4} md={3} key={`skeleton-${idx}`}>

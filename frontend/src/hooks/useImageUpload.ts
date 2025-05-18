@@ -1,10 +1,15 @@
 import { useState } from 'react';
 import { searchImage } from '../services/api';
 
+type SimilarImage = {
+  filename: string;
+  similarity: number;
+};
+
 interface UseImageUploadReturn {
   selectedFile: File | null;
   previewImage: string | null;
-  similarImages: string[];
+  similarImages: SimilarImage[];
   loading: boolean;
   error: string | null;
   isDragging: boolean;
@@ -20,7 +25,7 @@ interface UseImageUploadReturn {
 export const useImageUpload = (): UseImageUploadReturn => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
-  const [similarImages, setSimilarImages] = useState<string[]>([]);
+  const [similarImages, setSimilarImages] = useState<SimilarImage[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -31,17 +36,19 @@ export const useImageUpload = (): UseImageUploadReturn => {
     setError(null);
 
     try {
-      const response = await searchImage(selectedFile);
-      if (response.matches) {
-        setSimilarImages(response.matches);
-        setError(null);
-      } else {
-        setSimilarImages([]);
-        setError("Không tìm thấy ảnh tương tự.");
-      }
-    } catch (err) {
-      setError("Lỗi khi gửi yêu cầu đến server.");
-    } finally {
+    const response = await searchImage(selectedFile);
+
+    if (Array.isArray(response)) {
+      setSimilarImages(response);
+      setError(null);
+    } else {
+      setSimilarImages([]);
+      setError("Không tìm thấy ảnh tương tự.");
+    }
+  } catch (err) {
+    setError("Lỗi khi gửi yêu cầu đến server.");
+  }
+  finally {
       setLoading(false);
     }
   };
